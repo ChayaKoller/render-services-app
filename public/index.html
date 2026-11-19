@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chaya Koler Render's Services</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+      background: #f4f6fa;
+      color: #1f2937;
+    }
+    header {
+      background: #4338ca;
+      color: #fff;
+      padding: 24px 16px;
+      text-align: center;
+    }
+    header h1 { margin: 0 0 4px; font-size: 1.6rem; }
+    header p { margin: 0; opacity: .85; }
+    main {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    #status { text-align: center; padding: 40px 0; color: #6b7280; }
+    #status.error { color: #b91c1c; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1.15rem;
+      word-break: break-word;
+    }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .badge {
+      font-size: .75rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: #e0e7ff;
+      color: #3730a3;
+    }
+    .badge.ok { background: #dcfce7; color: #166534; }
+    .badge.warn { background: #fee2e2; color: #991b1b; }
+    dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: .9rem; }
+    dt { color: #6b7280; }
+    dd { margin: 0; word-break: break-all; }
+    a { color: #4338ca; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chaya Koler Render's Services</h1>
+    <p id="count"></p>
+  </header>
+
+  <main>
+    <div id="status">טוען...</div>
+    <div id="list" class="grid"></div>
+  </main>
+
+  <script>
+    const TYPE_LABELS = {
+      web_service: 'Web Service',
+      static_site: 'Static Site',
+      background_worker: 'Background Worker',
+      private_service: 'Private Service',
+      cron_job: 'Cron Job'
+    };
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function addRow(dl, label, value) {
+      if (!value) return;
+      dl.appendChild(el('dt', null, label));
+      const dd = el('dd');
+      if (typeof value === 'string' && value.startsWith('http')) {
+        const a = el('a', null, value);
+        a.href = value;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        dd.appendChild(a);
+      } else {
+        dd.textContent = value;
+      }
+      dl.appendChild(dd);
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('he-IL', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+    function renderCard(service) {
+      const details = service.serviceDetails || {};
+      const card = el('div', 'card');
+      card.appendChild(el('h2', null, service.name || '(ללא שם)'));
+
+      const badges = el('div', 'badges');
+      badges.appendChild(el('span', 'badge', TYPE_LABELS[service.type] || service.type));
+      if (details.runtime) badges.appendChild(el('span', 'badge', details.runtime));
+      if (details.plan) badges.appendChild(el('span', 'badge', details.plan));
+      const suspended = service.suspended === 'suspended';
+      badges.appendChild(el('span', 'badge ' + (suspended ? 'warn' : 'ok'), suspended ? 'מושהה' : 'פעיל'));
+      card.appendChild(badges);
+
+      const dl = el('dl');
+      addRow(dl, 'כתובת', details.url);
+      addRow(dl, 'Repository', service.repo);
+      addRow(dl, 'Branch', service.branch);
+      addRow(dl, 'אזור', details.region);
+      addRow(dl, 'פריסה אוטומטית', service.autoDeploy === 'yes' ? 'כן' : service.autoDeploy === 'no' ? 'לא' : '');
+      addRow(dl, 'נוצר', formatDate(service.createdAt));
+      addRow(dl, 'עודכן', formatDate(service.updatedAt));
+      addRow(dl, 'דשבורד', service.dashboardUrl);
+      addRow(dl, 'מזהה', service.id);
+      card.appendChild(dl);
+
+      return card;
+    }
+
+    async function load() {
+      const status = document.getElementById('status');
+      const list = document.getElementById('list');
+      try {
+        const res = await fetch('/services');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) {
+          status.textContent = 'לא נמצאו שירותים בחשבון.';
+          return;
+        }
+
+        status.remove();
+        document.getElementById('count').textContent = `נמצאו ${data.length} שירותים`;
+        data.forEach(item => list.appendChild(renderCard(item.service || item)));
+      } catch (err) {
+        status.textContent = 'שגיאה בטעינת הנתונים: ' + err.message;
+        status.classList.add('error');
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
